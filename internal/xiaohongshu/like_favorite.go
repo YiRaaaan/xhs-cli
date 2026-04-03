@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
@@ -21,7 +22,7 @@ type ActionResult struct {
 
 const (
 	SelectorLikeButton    = ".interact-container .left .like-lottie"
-	SelectorCollectButton = ".interact-container .left .reds-icon.collect-icon"
+	SelectorCollectButton = ".interact-container .left .collect-wrapper"
 )
 
 type interactActionType string
@@ -53,9 +54,12 @@ func (a *interactAction) preparePage(ctx context.Context, actionType interactAct
 	return page
 }
 
-func (a *interactAction) performClick(page *rod.Page, selector string) {
-	element := page.MustElement(selector)
-	element.MustClick()
+func (a *interactAction) performClick(page *rod.Page, selector string) error {
+	element, err := page.Timeout(30 * time.Second).Element(selector)
+	if err != nil {
+		return fmt.Errorf("未找到元素 %s: %w", selector, err)
+	}
+	return element.Click(proto.InputMouseButtonLeft, 1)
 }
 
 func (a *interactAction) getInteractState(page *rod.Page, feedID string) (liked bool, collected bool, err error) {
@@ -134,7 +138,9 @@ func (a *LikeAction) perform(ctx context.Context, feedID, xsecToken string, targ
 }
 
 func (a *LikeAction) toggleLike(page *rod.Page, feedID string, targetLiked bool, actionType interactActionType) error {
-	a.performClick(page, SelectorLikeButton)
+	if err := a.performClick(page, SelectorLikeButton); err != nil {
+		return fmt.Errorf("%s失败: %w", actionType, err)
+	}
 	time.Sleep(3 * time.Second)
 
 	liked, _, err := a.getInteractState(page, feedID)
@@ -145,7 +151,9 @@ func (a *LikeAction) toggleLike(page *rod.Page, feedID string, targetLiked bool,
 		return nil
 	}
 
-	a.performClick(page, SelectorLikeButton)
+	if err := a.performClick(page, SelectorLikeButton); err != nil {
+		return fmt.Errorf("重试%s失败: %w", actionType, err)
+	}
 	time.Sleep(2 * time.Second)
 	return nil
 }
@@ -194,7 +202,9 @@ func (a *FavoriteAction) perform(ctx context.Context, feedID, xsecToken string, 
 }
 
 func (a *FavoriteAction) toggleFavorite(page *rod.Page, feedID string, targetCollected bool, actionType interactActionType) error {
-	a.performClick(page, SelectorCollectButton)
+	if err := a.performClick(page, SelectorCollectButton); err != nil {
+		return fmt.Errorf("%s失败: %w", actionType, err)
+	}
 	time.Sleep(3 * time.Second)
 
 	_, collected, err := a.getInteractState(page, feedID)
@@ -205,7 +215,9 @@ func (a *FavoriteAction) toggleFavorite(page *rod.Page, feedID string, targetCol
 		return nil
 	}
 
-	a.performClick(page, SelectorCollectButton)
+	if err := a.performClick(page, SelectorCollectButton); err != nil {
+		return fmt.Errorf("重试%s失败: %w", actionType, err)
+	}
 	time.Sleep(2 * time.Second)
 	return nil
 }

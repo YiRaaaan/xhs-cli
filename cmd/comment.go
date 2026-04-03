@@ -31,7 +31,7 @@ var commentCmd = &cobra.Command{
 			return fmt.Errorf("必须提供 --xsec-token 参数")
 		}
 
-		return withPage(func(page *rod.Page) error {
+		return withPageNoHeadless(func(page *rod.Page) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
@@ -67,7 +67,7 @@ var replyCmd = &cobra.Command{
 			return fmt.Errorf("必须提供 --comment-id 或 --user-id")
 		}
 
-		return withPage(func(page *rod.Page) error {
+		return withPageNoHeadless(func(page *rod.Page) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 

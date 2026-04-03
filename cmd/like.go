@@ -30,8 +30,8 @@ var likeCmd = &cobra.Command{
 			return fmt.Errorf("必须提供 --xsec-token 参数")
 		}
 
-		return withPage(func(page *rod.Page) error {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		return withPageNoHeadless(func(page *rod.Page) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 
 			action := xiaohongshu.NewLikeAction(page)
