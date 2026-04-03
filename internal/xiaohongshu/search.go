@@ -9,6 +9,7 @@ import (
 
 	"github.com/Suoyiran1/xhs-cli/internal/errors"
 	"github.com/go-rod/rod"
+	"github.com/sirupsen/logrus"
 )
 
 type SearchResult struct {
@@ -152,34 +153,34 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 	page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
 
 	if len(filters) > 0 {
-		var allInternalFilters []internalFilterOption
+		// Collect filter text values to click
+		var filterTexts []string
 		for _, filter := range filters {
-			internalFilters, err := convertToInternalFilters(filter)
-			if err != nil {
-				return nil, fmt.Errorf("筛选选项转换失败: %w", err)
+			if filter.SortBy != "" {
+				filterTexts = append(filterTexts, filter.SortBy)
 			}
-			allInternalFilters = append(allInternalFilters, internalFilters...)
-		}
-
-		for _, filter := range allInternalFilters {
-			if err := validateInternalFilterOption(filter); err != nil {
-				return nil, fmt.Errorf("筛选选项验证失败: %w", err)
+			if filter.NoteType != "" {
+				filterTexts = append(filterTexts, filter.NoteType)
+			}
+			if filter.PublishTime != "" {
+				filterTexts = append(filterTexts, filter.PublishTime)
+			}
+			if filter.SearchScope != "" {
+				filterTexts = append(filterTexts, filter.SearchScope)
+			}
+			if filter.Location != "" {
+				filterTexts = append(filterTexts, filter.Location)
 			}
 		}
 
-		filterButton := page.MustElement(`div.filter`)
-		filterButton.MustHover()
-		page.MustWait(`() => document.querySelector('div.filter-panel') !== null`)
-
-		for _, filter := range allInternalFilters {
-			selector := fmt.Sprintf(`div.filter-panel div.filters:nth-child(%d) div.tags:nth-child(%d)`,
-				filter.FiltersIndex, filter.TagsIndex)
-			option := page.MustElement(selector)
-			option.MustClick()
+		if len(filterTexts) > 0 {
+			if err := applyFilters(page, filterTexts); err != nil {
+				logrus.Warnf("筛选应用失败，返回默认结果: %v", err)
+			} else {
+				page.MustWaitStable()
+				page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
+			}
 		}
-
-		page.MustWaitStable()
-		page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
 	}
 
 	result := page.MustEval(`() => {
@@ -205,6 +206,54 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 	}
 
 	return feeds, nil
+}
+
+// applyFilters opens the filter panel and clicks options by text content.
+func applyFilters(page *rod.Page, filterTexts []string) error {
+	// Click the filter button to open the panel
+	filterBtn, err := page.Timeout(10 * time.Second).Element(`div.filter`)
+	if err != nil {
+		return fmt.Errorf("未找到筛选按钮: %w", err)
+	}
+	filterBtn.MustClick()
+	time.Sleep(1 * time.Second)
+
+	// Wait for filter panel with retry
+	for i := 0; i < 3; i++ {
+		has, _, _ := page.Has(`.filter-panel`)
+		if has {
+			break
+		}
+		filterBtn.MustClick()
+		time.Sleep(1 * time.Second)
+	}
+
+	// Use JavaScript to click filter options by matching text content
+	for _, text := range filterTexts {
+		clicked := page.MustEval(`(targetText) => {
+			const panel = document.querySelector('.filter-panel');
+			if (!panel) return false;
+			// Find all clickable elements in the panel
+			const allEls = panel.querySelectorAll('.tag, .tags, span, div');
+			for (const el of allEls) {
+				if (el.textContent.trim() === targetText && el.offsetParent !== null) {
+					el.click();
+					return true;
+				}
+			}
+			return false;
+		}`, text).Bool()
+
+		if clicked {
+			logrus.Debugf("筛选: 点击了 '%s'", text)
+			time.Sleep(500 * time.Millisecond)
+		} else {
+			logrus.Warnf("筛选: 未找到 '%s'", text)
+		}
+	}
+
+	time.Sleep(1 * time.Second)
+	return nil
 }
 
 func makeSearchURL(keyword string) string {

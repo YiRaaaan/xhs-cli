@@ -32,8 +32,13 @@ var searchCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		keyword := args[0]
 
-		return withPage(func(page *rod.Page) error {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		hasFilters := searchSortBy != "" || searchNoteType != "" || searchPublishTime != "" || searchScope != "" || searchLocation != ""
+		runner := withPage
+		if hasFilters {
+			runner = withPageNoHeadless
+		}
+		return runner(func(page *rod.Page) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 
 			search := xiaohongshu.NewSearchAction(page)
